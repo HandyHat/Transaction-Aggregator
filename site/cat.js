@@ -81,6 +81,49 @@
     }
     return null;
   }
+  /* Product segments P&G competes in, used to set P&G lines beside the rival products a shopper bought instead.
+     A line is placed by what the product is (its keywords), then by its brand's home segment.
+     Aisles with no P&G brand in the UK (toilet roll, painkillers, plasters) are left out on purpose. */
+  var SEGMENTS = [
+    { id: "stain", name: "Stain removal", pitch: "Ariel", kw: ["stain", "oxi"] },
+    { id: "conditioner", name: "Fabric conditioner", pitch: "Lenor", kw: ["fab cond", "fabric conditioner", "fabric softener", "unstoppables", "scent beads", "scent booster"] },
+    { id: "laundry", name: "Laundry detergent", pitch: "Ariel, Fairy Non Bio, Bold", kw: ["non bio", "wash liq", "washing liquid", "washing powder", "laundry", "bio pods", "detergent"] },
+    { id: "dish", name: "Washing up & dishwasher", pitch: "Fairy", kw: ["w up", "washing up", "dishwasher", "rinse aid"] },
+    { id: "surface", name: "Surface & bathroom cleaning", pitch: "Flash", kw: ["bleach", "bathroom cleaner", "kitchen cleaner", "multi purpose", "surface", "limescale", "cleaner"] },
+    { id: "air", name: "Air care", pitch: "Febreze, Ambi Pur", kw: ["air freshener", "freshener", "plug in", "fabric refresher"] },
+    { id: "oral", name: "Oral care", pitch: "Oral-B", kw: ["toothpaste", "toothbrush", "mouthwash", "floss"] },
+    { id: "hair", name: "Hair care", pitch: "Pantene, Head & Shoulders, Herbal Essences", kw: ["shampoo", "conditioner"] },
+    { id: "shave", name: "Shaving", pitch: "Gillette, Venus", kw: ["razor", "razors", "blades", "shave", "shaving"] },
+    { id: "deo", name: "Deodorant", pitch: "Old Spice", kw: ["deodorant", "antiperspirant", "anti perspirant", "body spray"] },
+    { id: "wash", name: "Bath, shower & soap", pitch: "Olay, Old Spice", kw: ["shower gel", "body wash", "bar soap", "soap", "beauty cream bar", "beauty bar", "hand wash"] },
+    { id: "cold", name: "Cold & flu relief", pitch: "Vicks", kw: ["vaporub", "cough", "lozenges", "decongestant", "cold and flu", "sore throat"] },
+    { id: "baby", name: "Nappies & baby wipes", pitch: "Pampers", kw: ["nappies", "nappy", "baby wipes"] },
+    { id: "fem", name: "Feminine care", pitch: "Always, Tampax", kw: ["tampons", "sanitary", "panty liners", "pads"] }];
+  /* Rival brands and the segment each mostly sells in. Unbranded lines count as own label. */
+  var RIVALS = [
+    ["Persil", "laundry", ["persil"]], ["Surf", "laundry", ["surf"]], ["Ecover", "laundry", ["ecover"]], ["Comfort", "conditioner", ["comfort"]], ["Vanish", "stain", ["vanish"]],
+    ["Finish", "dish", ["finish"]], ["Cif", "surface", ["cif"]], ["Domestos", "surface", ["domestos"]], ["Dettol", "surface", ["dettol"]], ["Method", "surface", ["method"]],
+    ["Air Wick", "air", ["air wick", "airwick"]], ["Glade", "air", ["glade"]],
+    ["Colgate", "oral", ["colgate"]], ["Aquafresh", "oral", ["aquafresh"]], ["Sensodyne", "oral", ["sensodyne"]], ["Corsodyl", "oral", ["corsodyl"]], ["Listerine", "oral", ["listerine"]],
+    ["Alberto Balsam", "hair", ["alberto"]], ["TRESemmé", "hair", ["tresemme"]], ["Elvive", "hair", ["elvive"]], ["Garnier", "hair", ["garnier"]],
+    ["Wilkinson Sword", "shave", ["wilkinson"]], ["Bic", "shave", ["bic"]], ["King of Shaves", "shave", ["king of shaves"]],
+    ["Lynx", "deo", ["lynx"]], ["Sure", "deo", ["sure"]], ["Dove", "wash", ["dove"]], ["Radox", "wash", ["radox"]], ["Imperial Leather", "wash", ["imperial leather"]],
+    ["Palmolive", "wash", ["palmolive"]], ["Carex", "wash", ["carex"]], ["Nivea", "wash", ["nivea"]],
+    ["Lemsip", "cold", ["lemsip"]], ["Benylin", "cold", ["benylin"]], ["Strepsils", "cold", ["strepsils"]], ["Olbas", "cold", ["olbas"]],
+    ["Huggies", "baby", ["huggies"]], ["Bodyform", "fem", ["bodyform"]], ["Lil-Lets", "fem", ["lil lets"]]];
+  var PG_HOME = { "Ariel": "laundry", "Bold": "laundry", "Daz": "laundry", "Lenor": "conditioner", "Fairy": "dish", "Flash": "surface", "Viakal": "surface", "Swiffer": "surface",
+    "Febreze": "air", "Ambi Pur": "air", "Pampers": "baby", "Always": "fem", "Tampax": "fem", "Gillette": "shave", "Venus": "shave", "Braun": "shave", "Oral-B": "oral",
+    "Head & Shoulders": "hair", "Pantene": "hair", "Herbal Essences": "hair", "Aussie": "hair", "Olay": "wash", "Old Spice": "deo", "Vicks": "cold" };
+  function has(toks, joined, kw) { return kw.indexOf(" ") > 0 ? joined.indexOf(" " + kw + " ") >= 0 : toks.some(function (t) { return t === kw || (kw.length >= 4 && t.indexOf(kw) === 0); }); }
+  /* Returns { segment, name, pitch, brand, pg } for a line in a P&G segment, or null. */
+  function segmentOf(name) {
+    var toks = tokens(name), joined = " " + toks.join(" ") + " ", pg = brandOf(name), rival = null, seg = null, s, k;
+    if (!pg) for (s = 0; s < RIVALS.length && !rival; s++) for (k = 0; k < RIVALS[s][2].length; k++) if (has(toks, joined, RIVALS[s][2][k])) { rival = RIVALS[s]; break; }
+    for (s = 0; s < SEGMENTS.length && !seg; s++) for (k = 0; k < SEGMENTS[s].kw.length; k++) if (has(toks, joined, SEGMENTS[s].kw[k])) { seg = SEGMENTS[s]; break; }
+    if (!seg) { var home = pg ? PG_HOME[pg.brand] : rival && rival[1]; if (home) seg = SEGMENTS.filter(function (x) { return x.id === home; })[0]; }
+    if (!seg) return null;
+    return { segment: seg.id, name: seg.name, pitch: seg.pitch, brand: pg ? pg.brand : rival ? rival[0] : "Own label", pg: !!pg };
+  }
   function shop(mcc) { return MCC[mcc] || { cat: "misc", kind: "single" }; }
-  root.TillCat = { GROUPS: GROUPS, CATS: CATS, categorise: categorise, key: key, shop: shop, brandOf: brandOf, PG_BRANDS: PG_BRANDS.map(function (b) { return { brand: b[0], segment: b[1] }; }) };
+  root.TillCat = { GROUPS: GROUPS, CATS: CATS, categorise: categorise, key: key, shop: shop, brandOf: brandOf, segmentOf: segmentOf, SEGMENTS: SEGMENTS.map(function (s) { return { id: s.id, name: s.name, pitch: s.pitch }; }), PG_BRANDS: PG_BRANDS.map(function (b) { return { brand: b[0], segment: b[1] }; }) };
 })(typeof window !== "undefined" ? window : globalThis);

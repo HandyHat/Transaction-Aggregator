@@ -240,6 +240,10 @@ table.t td small{display:block;color:var(--muted);font-size:11.5px}
 .brandbtn{border:0;background:transparent;padding:0;font-weight:600;text-align:left;text-decoration:underline;text-decoration-color:var(--line);text-underline-offset:3px}
 .brandbtn:hover{text-decoration-color:var(--accent)}
 td .meter{min-width:70px}
+.split{display:flex;height:10px;border-radius:99px;overflow:hidden;background:var(--sunk);border:1px solid var(--line);min-width:90px}
+.split i{display:block;height:100%}.split i.sp-pg{background:var(--accent)}.split i.sp-rv{background:var(--warn)}
+.key{display:inline-flex;align-items:center;gap:5px;margin-left:12px}.key::before{content:"";width:10px;height:10px;border-radius:3px;background:var(--k)}
+.opps-lead{padding:0 14px 12px;margin:0;font-size:14px;max-width:80ch}
 .csvbox{width:100%;height:140px;margin-top:10px;font:12px var(--mono);border:1px solid var(--line);border-radius:8px;background:var(--sunk);color:var(--ink);padding:8px}
 @media (max-width:1180px){
   .pg{grid-template-columns:minmax(0,1fr)}
@@ -817,31 +821,74 @@ function pgSource() {
   /* returns { rows, denom(month, store) -> [care spend, receipts] } in one shape for both scopes */
   if (P.scope === "panel" && P.panel) {
     const rows = P.panel.rows.map(r => { const b = C.brandOf(r[5]); return { shopper: r[0], receipt: r[1], store: r[2], town: r[3], date: r[4], product: r[5], qty: r[6], unit: r[7], promo: r[8], total: r[9], brand: b.brand, segment: b.segment, payment: "", tx: "", account: "" }; });
-    return { rows, denom: P.panel.denom.map(d => ({ month: d[0], store: d[1], care: d[2], receipts: d[3] })) };
+    /* rival lines in P&G segments are only in extracts built with the current tools/build_pg_panel.js */
+    const seg = P.panel.others ? P.panel.rows.concat(P.panel.others).map(r => segRow(r[0], r[1], r[2], r[4], r[5], r[9])).filter(Boolean) : null;
+    return { rows, seg, denom: P.panel.denom.map(d => ({ month: d[0], store: d[1], care: d[2], receipts: d[3] })) };
   }
-  const rows = [], den = {};
+  const rows = [], den = {}, seg = [];
   [...S.receipts.values()].filter(r => r.date).forEach(r => {
     const t = txOfReceipt(r.id), shop = shopOf(r), truth = r.sampleId && sampleById(r.sampleId), k = r.date.slice(0, 7) + "|" + (r.store || "Unknown shop");
     den[k] = den[k] || { month: r.date.slice(0, 7), store: r.store || "Unknown shop", care: 0, receipts: 0 }; den[k].receipts++;
     r.items.forEach(i => {
       if (CARE.includes(lineCat(i.name, shop))) den[k].care += i.total;
+      const s = segRow("", r.sampleId || r.id, r.store || "Unknown shop", r.date, i.name, i.total); if (s) seg.push(s);
       const b = C.brandOf(i.name); if (!b) return;
       rows.push({ shopper: "", receipt: r.sampleId || r.id, store: r.store || "Unknown shop", town: truth ? truth.address.split("|")[1].trim() : "", date: r.date, product: i.name, qty: i.qty, unit: i.unit, promo: (i.promo || "").replace(" (simulated)", ""), total: i.total,
         brand: b.brand, segment: b.segment, payment: t ? "Card" : r.status === "cash" ? "Cash" : "Not matched to a payment", tx: t ? t.TransactionId : "", account: t ? "··" + accOf(t.AccountId)._last4 : "" });
     });
   });
-  return { rows, denom: Object.values(den) };
+  return { rows, seg, denom: Object.values(den) };
+}
+function segRow(shopper, receipt, store, date, product, total) {
+  const s = C.segmentOf(product); return s && { shopper, receipt, store, date, product, total, segment: s.segment, brand: s.brand, pg: s.pg };
+}
+/* P&G against rival brands, segment by segment: where shoppers already buy the category but not from P&G */
+function pgOpportunities(lines, panel) {
+  const g = {};
+  lines.forEach(l => {
+    const x = g[l.segment] = g[l.segment] || { pg: 0, rv: 0, rivals: {}, pgB: new Set(), who: {} }, who = panel ? l.shopper : l.receipt;
+    const w = x.who[who] = x.who[who] || { pg: 0, rv: 0 };
+    if (l.pg) { x.pg += l.total; x.pgB.add(l.brand); w.pg += l.total; } else { x.rv += l.total; x.rivals[l.brand] = (x.rivals[l.brand] || 0) + l.total; w.rv += l.total; }
+  });
+  return C.SEGMENTS.filter(s => g[s.id]).map(s => {
+    const x = g[s.id], ws = Object.values(x.who), total = x.pg + x.rv;
+    const status = !x.rv ? "hold" : !x.pg ? "open" : "split";
+    return { ...s, pg: x.pg, rv: x.rv, total, share: total ? x.pg / total : 0, pgBrands: [...x.pgB],
+      rivals: Object.entries(x.rivals).sort((a, b) => b[1] - a[1]),
+      rivalOnly: ws.filter(w => w.rv && !w.pg).length, mixed: ws.filter(w => w.rv && w.pg).length, buyers: ws.length, status };
+  }).sort((a, b) => b.rv - a.rv || b.total - a.total);
 }
 function pgFiltered() {
   const src = pgSource(), inRange = m => (!P.from || m >= P.from) && (!P.to || m <= P.to), inStore = st => P.store === "all" || st === P.store;
   const base = src.rows.filter(r => inRange(r.date.slice(0, 7)) && inStore(r.store));
   const den = src.denom.filter(d => inRange(d.month) && inStore(d.store));
-  return { src, base, rows: P.brand ? base.filter(r => r.brand === P.brand) : base, care: den.reduce((s, d) => s + d.care, 0), receipts: den.reduce((s, d) => s + d.receipts, 0) };
+  return { src, base, seg: src.seg && src.seg.filter(r => inRange(r.date.slice(0, 7)) && inStore(r.store)), rows: P.brand ? base.filter(r => r.brand === P.brand) : base, care: den.reduce((s, d) => s + d.care, 0), receipts: den.reduce((s, d) => s + d.receipts, 0) };
 }
 function pgCsv(rows) {
   const q = v => { v = String(v ?? ""); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
   const head = ["Date", "Retailer", "Location", "Manufacturer", "Brand", "Segment", "Product", "Quantity", "Unit price GBP", "Promotion", "Line total GBP", "Receipt ID", "Shopper ID", "Payment", "Transaction ID", "Account"];
   return [head, ...rows.slice().sort((a, b) => a.date.localeCompare(b.date) || a.receipt.localeCompare(b.receipt)).map(r => [r.date, r.store, r.town, "Procter & Gamble", r.brand, r.segment, r.product, r.qty, r.unit.toFixed(2), r.promo, r.total.toFixed(2), r.receipt, r.shopper, r.payment, r.tx, r.account])].map(l => l.map(q).join(",")).join("\r\n");
+}
+function pgOppsHtml(f, panel) {
+  const head = `<header><h2>Conversion opportunities</h2><span class="count"><span class="key" style="--k:var(--accent)">P&amp;G</span><span class="key" style="--k:var(--warn)">Other brands</span></span></header>`;
+  if (!f.seg) return `<div class="panel wide">${head}<p class="empty">The spreadsheet extract bundled here holds P&amp;G lines only, so there is nothing to compare against. Rebuild <code>pg-panel.js</code> with <code>tools/build_pg_panel.js</code> to include rival brands, or switch to receipts captured in this app.</p></div>`;
+  const ops = pgOpportunities(f.seg, panel), rv = ops.reduce((s, o) => s + o.rv, 0), tot = ops.reduce((s, o) => s + o.total, 0);
+  if (!ops.length) return `<div class="panel wide">${head}<p class="empty">No purchases in the segments P&amp;G sells in for this selection.</p></div>`;
+  const top = ops.filter(o => o.rv > 0), unit = panel ? ["shopper", "shoppers"] : ["receipt", "receipts"], n = (k, w) => `${k} ${w[k === 1 ? 0 : 1]}`;
+  const chip = o => o.status === "open" ? `<span class="chip bad">No P&amp;G bought</span>` : o.status === "split" ? `<span class="chip warn">${Math.round(100 * (1 - o.share))}% to others</span>` : `<span class="chip ok">P&amp;G holds it</span>`;
+  const lead = top.length
+    ? `<b>${gbp(rv)}</b> of the ${gbp(tot)} spent in segments P&amp;G sells in went to other brands (${Math.round(100 * rv / tot)}%). The biggest opening is <b>${esc(top[0].name)}</b>: ${gbp(top[0].rv)} on ${esc(top[0].rivals.slice(0, 2).map(r => r[0]).join(" and "))}${top[0].pg ? "" : ", with no P&amp;G bought there at all"}. Pitch ${esc(top[0].pitch)}.`
+    : `Every purchase in the segments P&amp;G sells in went to P&amp;G brands in this selection.`;
+  return `<div class="panel wide">${head}<p class="opps-lead">${lead}</p>
+    <div class="scroll"><table class="t"><thead><tr><th>Segment</th><th style="width:18%">P&amp;G share</th><th class="r">P&amp;G</th><th class="r">Other brands</th><th>Bought instead</th><th class="r">${panel ? "Shoppers buying only others" : "Receipts with only others"}</th><th class="r">${panel ? "Shoppers buying both" : "Receipts with both"}</th><th>Opportunity</th><th>P&amp;G brand to pitch</th></tr></thead><tbody>
+    ${ops.map(o => `<tr><td>${esc(o.name)}${o.pgBrands.length ? `<small>Buying ${esc(o.pgBrands.join(", "))}</small>` : ""}</td>
+      <td><div class="split" role="img" aria-label="P&amp;G ${Math.round(100 * o.share)}%"><i class="sp-pg" style="width:${100 * o.share}%"></i><i class="sp-rv" style="width:${100 - 100 * o.share}%"></i></div><small class="num">${Math.round(100 * o.share)}% P&amp;G</small></td>
+      <td class="r num">${gbp(o.pg)}</td><td class="r num"><b>${gbp(o.rv)}</b></td>
+      <td class="wrap">${o.rivals.slice(0, 3).map(r => `${esc(r[0])} <span class="muted num">${gbp(r[1])}</span>`).join("<br>") || `<span class="muted">None</span>`}</td>
+      <td class="r num">${o.rivalOnly}<small>of ${n(o.buyers, unit)}</small></td><td class="r num">${o.mixed}</td>
+      <td>${chip(o)}</td><td>${o.status === "hold" ? `<span class="muted">Keep ${esc(o.pgBrands.join(", "))}</span>` : esc(o.pitch)}</td></tr>`).join("")}
+    </tbody></table></div>
+    <p class="note" style="margin:0 14px 14px">Lines are grouped by what the product is, so Comfort sits beside Lenor and Cif beside Flash. ${panel ? "Shoppers buying only other brands are the people to win over; shoppers buying both already know P&amp;G and are the easiest to switch." : "Receipts with only other brands show the shops where the household reached for a rival; receipts with both show P&amp;G is already in the basket and can take the rest."} Aisles with no P&amp;G brand in the UK, like toilet roll and painkillers, are left out.</p></div>`;
 }
 let saveFile = null;
 function renderPg() {
@@ -870,6 +917,7 @@ function renderPg() {
       <div class="stat"><div class="k">Receipts with a P&amp;G product</div><div class="v num">${recs} <small>of ${f.receipts.toLocaleString("en-GB")}${panel ? ` · ${buyers} of ${P.panel.shoppers} shoppers` : ""}</small></div></div>
       <div class="stat"><div class="k">Share of household, toiletries and health spend</div><div class="v num">${f.care > 0 ? Math.round(100 * spend / f.care) : 0}% <small>of ${gbp(f.care)}</small></div><div class="meter" style="margin-top:8px"><i style="width:${f.care > 0 ? Math.min(100, 100 * spend / f.care) : 0}%"></i></div></div>
     </div>
+    ${pgOppsHtml(f, panel)}
     <div class="panel"><header><h2>By brand</h2><span class="count">${P.brand ? `<button type="button" class="btn small" data-pgbrand="">Show all brands</button>` : "Select a brand to filter everything below and the export"}</span></header>
       <div class="scroll"><table class="t"><thead><tr><th>Brand</th><th style="width:26%">Spend</th><th class="r"></th><th class="r">Units</th><th class="r">Avg price</th><th class="r">Receipts</th>${panel ? `<th class="r">Shoppers</th>` : ""}<th>Last bought</th></tr></thead><tbody>
       ${brands.map(b => `<tr class="${P.brand === b.k ? "sel" : ""}"><td><button type="button" class="brandbtn" data-pgbrand="${esc(b.k)}" aria-pressed="${P.brand === b.k}">${esc(b.k)}</button><small>${esc([...b.seg].join(", "))}</small></td><td><div class="meter" role="img" aria-label="${gbp(b.spend)}"><i style="width:${100 * b.spend / bmax}%"></i></div></td><td class="r num"><b>${gbp(b.spend)}</b></td><td class="r num">${b.units}</td><td class="r num">${gbp(b.spend / b.units)}</td><td class="r num">${b.rec.size}</td>${panel ? `<td class="r num">${b.shop.size}</td>` : ""}<td class="num">${dLong(b.last)}</td></tr>`).join("") || `<tr><td colspan="8" class="wrap muted">No P&amp;G products on the receipts in this selection. Scan more receipts, widen the dates, or switch to the whole spreadsheet.</td></tr>`}
