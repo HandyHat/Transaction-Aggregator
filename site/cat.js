@@ -22,9 +22,9 @@
     "4900": { cat: "bills", kind: "single" }, "4814": { cat: "bills", kind: "single" }, "6513": { cat: "housing", kind: "single" }, "9311": { cat: "housing", kind: "single" } };
   var RULES = [
     ["transport", ["unleaded", "diesel", "petrol", "fuel", "screenwash", "car wash", "top up", "parking", "engine oil"]],
-    ["toiletries", ["toothpaste", "soap", "shampoo", "shower gel", "colgate", "aquafresh", "oral b", "pantene", "shoulders", "alberto", "radox", "dove", "imperial leather", "deodorant", "razor", "lip balm", "sunscreen", "moisturiser", "conditioner"]],
+    ["toiletries", ["toothpaste", "soap", "shampoo", "shower gel", "colgate", "aquafresh", "oral b", "pantene", "shoulders", "alberto", "radox", "dove", "imperial leather", "deodorant", "razor", "gillette", "blades", "lip balm", "sunscreen", "moisturiser", "conditioner"]],
     ["household", ["tissue", "toilet", "kitchen roll", "wash", "bleach", "cleaner", "dishwasher", "fab cond", "pods", "non bio", "scent", "stain", "vanish", "cif", "dettol", "domestos", "flash", "finish", "ariel", "persil", "surf", "comfort", "lenor", "fairy", "andrex", "cushelle", "plenty", "bin bags", "foil"]],
-    ["health", ["paracetamol", "ibuprofen", "tablets", "capsules", "plasters", "vitamin", "cough", "syrup", "hayfever", "antiseptic", "bandage", "lozenges", "prescription"]],
+    ["health", ["paracetamol", "ibuprofen", "tablets", "capsules", "plasters", "vitamin", "cough", "syrup", "hayfever", "antiseptic", "bandage", "lozenges", "prescription", "vicks", "vaporub"]],
     ["electronics", ["cable", "usb", "charger", "batteries", "headphones", "earbuds", "phone", "hdmi", "adapter", "speaker"]],
     ["home", ["screws", "paint", "roller", "bulb", "tape", "kettle", "gloves", "hammer", "drill", "sandpaper", "filler", "toaster", "compost", "hooks"]],
     ["clothing", ["shirt", "socks", "jeans", "jumper", "hoodie", "trainers", "jacket", "dress", "leggings"]],
@@ -61,6 +61,26 @@
     }
     return null;
   }
+  /* Procter & Gamble brands sold in the UK, with the product segment each belongs to.
+     Short brand names must match exactly (FAIRY must not catch DAIRY); longer ones allow one OCR slip. */
+  var PG_BRANDS = [
+    ["Ariel", "Fabric care", ["ariel"]], ["Bold", "Fabric care", ["bold"]], ["Daz", "Fabric care", ["daz"]], ["Lenor", "Fabric care", ["lenor"]],
+    ["Fairy", "Home care", ["fairy"]], ["Flash", "Home care", ["flash"]], ["Febreze", "Home care", ["febreze"]], ["Viakal", "Home care", ["viakal"]],
+    ["Ambi Pur", "Home care", ["ambi pur", "ambipur"]], ["Swiffer", "Home care", ["swiffer"]],
+    ["Pampers", "Baby care", ["pampers"]], ["Always", "Feminine care", ["always"]], ["Tampax", "Feminine care", ["tampax"]],
+    ["Gillette", "Grooming", ["gillette"]], ["Venus", "Grooming", ["venus"]], ["Braun", "Grooming", ["braun"]],
+    ["Oral-B", "Oral care", ["oral b", "oralb"]], ["Head & Shoulders", "Hair care", ["head and shoulders", "head shoulders", "shoulders"]],
+    ["Pantene", "Hair care", ["pantene"]], ["Herbal Essences", "Hair care", ["herbal essences"]], ["Aussie", "Hair care", ["aussie"]],
+    ["Olay", "Skin & personal care", ["olay"]], ["Old Spice", "Skin & personal care", ["old spice"]], ["Vicks", "Personal health", ["vicks"]]];
+  function brandOf(name) {
+    var toks = tokens(name), joined = " " + toks.join(" ") + " ", b, k, kw, hit;
+    for (b = 0; b < PG_BRANDS.length; b++) for (k = 0; k < PG_BRANDS[b][2].length; k++) {
+      kw = PG_BRANDS[b][2][k];
+      hit = kw.indexOf(" ") > 0 ? joined.indexOf(" " + kw + " ") >= 0 : toks.some(function (t) { return t === kw || (kw.length >= 6 && Math.abs(t.length - kw.length) <= 1 && lev(t, kw) <= 1); });
+      if (hit) return { brand: PG_BRANDS[b][0], segment: PG_BRANDS[b][0] === "Fairy" && /non bio|pods|fab|laundry/.test(joined) ? "Fabric care" : PG_BRANDS[b][1] };
+    }
+    return null;
+  }
   function shop(mcc) { return MCC[mcc] || { cat: "misc", kind: "single" }; }
-  root.TillCat = { GROUPS: GROUPS, CATS: CATS, categorise: categorise, key: key, shop: shop };
+  root.TillCat = { GROUPS: GROUPS, CATS: CATS, categorise: categorise, key: key, shop: shop, brandOf: brandOf, PG_BRANDS: PG_BRANDS.map(function (b) { return { brand: b[0], segment: b[1] }; }) };
 })(typeof window !== "undefined" ? window : globalThis);

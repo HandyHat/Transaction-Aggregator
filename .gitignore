@@ -1,0 +1,4 @@
+node_modules/
+all_rows.json
+*.xlsx
+.DS_Store

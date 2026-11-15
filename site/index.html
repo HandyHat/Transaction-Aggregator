@@ -221,7 +221,29 @@ details.api summary{cursor:pointer;font-size:12.5px;color:var(--muted);padding:1
 .catrow select,.sec select{border:1px solid var(--line);background:var(--surface);border-radius:6px;padding:3px 6px;max-width:100%}
 .split{display:grid;grid-template-columns:minmax(0,1fr) 90px auto;gap:8px;align-items:center;font-size:13px;padding:3px 0}
 .tip{position:fixed;z-index:40;background:var(--ink);color:var(--bg);font-size:12px;padding:4px 8px;border-radius:6px;pointer-events:none;white-space:nowrap}
+.pg{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:16px;padding:16px 20px 40px;align-items:start}
+.pg>.wide{grid-column:1/-1}
+.pgbar{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:end;padding:12px 14px}
+.pgbar label{display:grid;gap:3px;font-size:12px;color:var(--muted)}
+.pgbar select{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:6px 10px;color:var(--ink);font-size:14px}
+.pgbar .push{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
+.pgstats{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--line);overflow:hidden}
+.scroll{overflow-x:auto}
+table.t{width:100%;border-collapse:collapse;font-size:13px}
+table.t th{font:600 11.5px var(--body);letter-spacing:.04em;text-transform:uppercase;color:var(--muted);text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);background:var(--sunk);white-space:nowrap}
+table.t td{padding:7px 10px;border-bottom:1px solid var(--line);vertical-align:middle;white-space:nowrap}
+table.t tr:last-child td{border-bottom:0}
+table.t .r{text-align:right}
+table.t td.wrap{white-space:normal;min-width:180px}
+table.t tr.sel td{background:var(--accent-soft)}
+table.t td small{display:block;color:var(--muted);font-size:11.5px}
+.brandbtn{border:0;background:transparent;padding:0;font-weight:600;text-align:left;text-decoration:underline;text-decoration-color:var(--line);text-underline-offset:3px}
+.brandbtn:hover{text-decoration-color:var(--accent)}
+td .meter{min-width:70px}
+.csvbox{width:100%;height:140px;margin-top:10px;font:12px var(--mono);border:1px solid var(--line);border-radius:8px;background:var(--sunk);color:var(--ink);padding:8px}
 @media (max-width:1180px){
+  .pg{grid-template-columns:minmax(0,1fr)}
+  .pgstats{grid-template-columns:1fr 1fr}
   .budget{grid-template-columns:minmax(0,1fr)}
   .bhead{grid-template-columns:1fr 1fr}
   .main{grid-template-columns:280px minmax(0,1fr)}
@@ -237,7 +259,8 @@ details.api summary{cursor:pointer;font-size:12.5px;color:var(--muted);padding:1
   .tx{grid-template-columns:44px minmax(0,1fr) 84px}
   .tx .s{grid-column:2/4;grid-row:2;justify-content:flex-start}
   .top{padding:12px 16px}.stat{padding:10px 16px}
-  .budget{padding:12px 16px 32px}
+  .budget,.pg{padding:12px 16px 32px}
+  .pgbar .push{margin-left:0}
   .brow{grid-template-columns:minmax(0,1fr) auto}
   .brow .meter{grid-column:1/-1;grid-row:2}.brow .bfig{grid-column:1;grid-row:3;text-align:left}.brow .chip{grid-column:2;grid-row:1;justify-self:end}
 }
@@ -250,7 +273,7 @@ details.api summary{cursor:pointer;font-size:12.5px;color:var(--muted);padding:1
     <h1>Tillroll</h1>
     <span class="demo">Mock bank · sample receipts</span>
   </div>
-  <nav class="views" aria-label="Views"><a href="#transactions" id="navTx" aria-current="page">Transactions</a><a href="#budget" id="navBud">Budget</a></nav>
+  <nav class="views" aria-label="Views"><a href="#transactions" id="navTx" aria-current="page">Transactions</a><a href="#budget" id="navBud">Budget</a><a href="#pg" id="navPg">P&amp;G products</a></nav>
   <div class="conn">
     <span id="connText"><span class="dot"></span>Connecting…</span>
     <button class="btn" id="syncBtn" type="button">Sync transactions</button>
@@ -298,6 +321,7 @@ details.api summary{cursor:pointer;font-size:12.5px;color:var(--muted);padding:1
   <aside class="panel detail" id="detail" aria-label="Details"></aside>
 </main>
 <section class="budget" id="budgetView" aria-label="Budget" hidden></section>
+<section class="pg" id="pgView" aria-label="P&amp;G products" hidden></section>
 <div class="tip" id="tip" hidden></div>
 <div class="toast" id="toast" role="status" hidden></div>
 
@@ -780,13 +804,91 @@ function renderBudget() {
     <aside class="panel" aria-label="Category detail">${drill}</aside>`;
 }
 function setView() {
-  B.view = location.hash === "#budget" ? "budget" : "transactions";
-  $("#txView").hidden = $("#summary").hidden = B.view === "budget"; $("#budgetView").hidden = B.view !== "budget";
-  $("#navTx").toggleAttribute("aria-current", B.view !== "budget"); $("#navBud").toggleAttribute("aria-current", B.view === "budget");
-  if (B.view !== "budget") $("#navTx").setAttribute("aria-current", "page"); else $("#navBud").setAttribute("aria-current", "page");
-  if (B.view === "budget") document.body.classList.remove("open"); renderBudget();
+  B.view = location.hash === "#budget" ? "budget" : location.hash === "#pg" ? "pg" : "transactions";
+  $("#txView").hidden = $("#summary").hidden = B.view !== "transactions"; $("#budgetView").hidden = B.view !== "budget"; $("#pgView").hidden = B.view !== "pg";
+  [["navTx", "transactions"], ["navBud", "budget"], ["navPg", "pg"]].forEach(([id, v]) => { if (B.view === v) $("#" + id).setAttribute("aria-current", "page"); else $("#" + id).removeAttribute("aria-current"); });
+  if (B.view !== "transactions") document.body.classList.remove("open"); renderBudget(); renderPg();
 }
-function render() { renderBudget(); renderSummary(); renderJobs(); renderInbox(); renderTray(); renderLedger(); renderDetail(); }
+
+/* ---------- P&G products: every receipt line whose brand belongs to Procter & Gamble ---------- */
+const P = { scope: "app", from: "", to: "", store: "all", brand: null, panel: null, loading: false, csvOpen: false };
+const CARE = ["household", "toiletries", "health"];                 // the aisles P&G sells in, for the share figure
+function pgSource() {
+  /* returns { rows, denom(month, store) -> [care spend, receipts] } in one shape for both scopes */
+  if (P.scope === "panel" && P.panel) {
+    const rows = P.panel.rows.map(r => { const b = C.brandOf(r[5]); return { shopper: r[0], receipt: r[1], store: r[2], town: r[3], date: r[4], product: r[5], qty: r[6], unit: r[7], promo: r[8], total: r[9], brand: b.brand, segment: b.segment, payment: "", tx: "", account: "" }; });
+    return { rows, denom: P.panel.denom.map(d => ({ month: d[0], store: d[1], care: d[2], receipts: d[3] })) };
+  }
+  const rows = [], den = {};
+  [...S.receipts.values()].filter(r => r.date).forEach(r => {
+    const t = txOfReceipt(r.id), shop = shopOf(r), truth = r.sampleId && sampleById(r.sampleId), k = r.date.slice(0, 7) + "|" + (r.store || "Unknown shop");
+    den[k] = den[k] || { month: r.date.slice(0, 7), store: r.store || "Unknown shop", care: 0, receipts: 0 }; den[k].receipts++;
+    r.items.forEach(i => {
+      if (CARE.includes(lineCat(i.name, shop))) den[k].care += i.total;
+      const b = C.brandOf(i.name); if (!b) return;
+      rows.push({ shopper: "", receipt: r.sampleId || r.id, store: r.store || "Unknown shop", town: truth ? truth.address.split("|")[1].trim() : "", date: r.date, product: i.name, qty: i.qty, unit: i.unit, promo: (i.promo || "").replace(" (simulated)", ""), total: i.total,
+        brand: b.brand, segment: b.segment, payment: t ? "Card" : r.status === "cash" ? "Cash" : "Not matched to a payment", tx: t ? t.TransactionId : "", account: t ? "··" + accOf(t.AccountId)._last4 : "" });
+    });
+  });
+  return { rows, denom: Object.values(den) };
+}
+function pgFiltered() {
+  const src = pgSource(), inRange = m => (!P.from || m >= P.from) && (!P.to || m <= P.to), inStore = st => P.store === "all" || st === P.store;
+  const base = src.rows.filter(r => inRange(r.date.slice(0, 7)) && inStore(r.store));
+  const den = src.denom.filter(d => inRange(d.month) && inStore(d.store));
+  return { src, base, rows: P.brand ? base.filter(r => r.brand === P.brand) : base, care: den.reduce((s, d) => s + d.care, 0), receipts: den.reduce((s, d) => s + d.receipts, 0) };
+}
+function pgCsv(rows) {
+  const q = v => { v = String(v ?? ""); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+  const head = ["Date", "Retailer", "Location", "Manufacturer", "Brand", "Segment", "Product", "Quantity", "Unit price GBP", "Promotion", "Line total GBP", "Receipt ID", "Shopper ID", "Payment", "Transaction ID", "Account"];
+  return [head, ...rows.slice().sort((a, b) => a.date.localeCompare(b.date) || a.receipt.localeCompare(b.receipt)).map(r => [r.date, r.store, r.town, "Procter & Gamble", r.brand, r.segment, r.product, r.qty, r.unit.toFixed(2), r.promo, r.total.toFixed(2), r.receipt, r.shopper, r.payment, r.tx, r.account])].map(l => l.map(q).join(",")).join("\r\n");
+}
+let saveFile = null;
+function renderPg() {
+  if (B.view !== "pg") return;
+  const el = $("#pgView"), mName = m => `${MONTHS[+m.slice(5) - 1]} ${m.slice(0, 4)}`;
+  if (P.scope === "panel" && !P.panel) { el.innerHTML = `<div class="panel wide"><p class="empty"><span class="spin"></span> Loading P&amp;G lines from the whole spreadsheet…</p></div>`; return; }
+  const f = pgFiltered(), rows = f.rows, panel = P.scope === "panel";
+  const months = [...new Set(f.src.denom.map(d => d.month).concat(f.src.rows.map(r => r.date.slice(0, 7))))].sort(), stores = [...new Set(f.src.denom.map(d => d.store))].sort();
+  const spend = rows.reduce((s, r) => s + r.total, 0), units = rows.reduce((s, r) => s + r.qty, 0), recs = new Set(rows.map(r => r.receipt)).size, promo = rows.filter(r => r.promo).length, buyers = new Set(rows.map(r => r.shopper)).size;
+  const group = (list, key) => { const g = {}; list.forEach(r => { const k = key(r), x = g[k] = g[k] || { k, spend: 0, units: 0, rec: new Set(), shop: new Set(), last: "", seg: new Set() }; x.spend += r.total; x.units += r.qty; x.rec.add(r.receipt); x.shop.add(r.shopper); x.seg.add(r.segment); if (r.date > x.last) x.last = r.date; }); return Object.values(g).sort((a, b) => b.spend - a.spend); };
+  const brands = group(f.base, r => r.brand), bmax = brands.length ? brands[0].spend : 1, byStore = group(rows, r => r.store), smax = byStore.length ? byStore[0].spend : 1;
+  const shownMonths = months.filter(m => (!P.from || m >= P.from) && (!P.to || m <= P.to)), mv = shownMonths.map(m => rows.filter(r => r.date.startsWith(m)).reduce((s, r) => s + r.total, 0)), mmax = Math.max(...mv, 1) * 1.15;
+  const opt = (v, label, cur) => `<option value="${esc(v)}" ${v === cur ? "selected" : ""}>${esc(label)}</option>`;
+  const shown = rows.slice().sort((a, b) => b.date.localeCompare(a.date) || b.total - a.total).slice(0, 50);
+  el.innerHTML = `
+    <div class="panel wide pgbar">
+      <label>Receipts to include<span class="seg" role="group" aria-label="Receipts to include"><button type="button" data-pgscope="app" aria-pressed="${!panel}">Captured in this app</button><button type="button" data-pgscope="panel" aria-pressed="${panel}">Whole spreadsheet</button></span></label>
+      <label for="pgFrom">From<select id="pgFrom" data-pg="from">${opt("", "First month", P.from)}${months.map(m => opt(m, mName(m), P.from)).join("")}</select></label>
+      <label for="pgTo">To<select id="pgTo" data-pg="to">${opt("", "Latest month", P.to)}${months.map(m => opt(m, mName(m), P.to)).join("")}</select></label>
+      <label for="pgStore">Retailer<select id="pgStore" data-pg="store">${opt("all", "All retailers", P.store)}${stores.map(x => opt(x, x, P.store)).join("")}</select></label>
+      <div class="push">${saveFile ? `<button type="button" class="btn primary" data-pgexport="save" ${rows.length ? "" : "disabled"}>Download CSV</button>` : ""}<button type="button" class="btn ${saveFile ? "" : "primary"}" data-pgexport="copy" ${rows.length ? "" : "disabled"}>Copy CSV</button></div>
+    </div>
+    <div class="panel wide pgstats">
+      <div class="stat"><div class="k">P&amp;G spend${P.brand ? ", " + esc(P.brand) : ""}</div><div class="v num">${gbp(spend)} <small>${rows.length} line${rows.length === 1 ? "" : "s"}</small></div></div>
+      <div class="stat"><div class="k">Units bought</div><div class="v num">${units} <small>${rows.length ? Math.round(100 * promo / rows.length) : 0}% of lines on promotion</small></div></div>
+      <div class="stat"><div class="k">Receipts with a P&amp;G product</div><div class="v num">${recs} <small>of ${f.receipts.toLocaleString("en-GB")}${panel ? ` · ${buyers} of ${P.panel.shoppers} shoppers` : ""}</small></div></div>
+      <div class="stat"><div class="k">Share of household, toiletries and health spend</div><div class="v num">${f.care > 0 ? Math.round(100 * spend / f.care) : 0}% <small>of ${gbp(f.care)}</small></div><div class="meter" style="margin-top:8px"><i style="width:${f.care > 0 ? Math.min(100, 100 * spend / f.care) : 0}%"></i></div></div>
+    </div>
+    <div class="panel"><header><h2>By brand</h2><span class="count">${P.brand ? `<button type="button" class="btn small" data-pgbrand="">Show all brands</button>` : "Select a brand to filter everything below and the export"}</span></header>
+      <div class="scroll"><table class="t"><thead><tr><th>Brand</th><th style="width:26%">Spend</th><th class="r"></th><th class="r">Units</th><th class="r">Avg price</th><th class="r">Receipts</th>${panel ? `<th class="r">Shoppers</th>` : ""}<th>Last bought</th></tr></thead><tbody>
+      ${brands.map(b => `<tr class="${P.brand === b.k ? "sel" : ""}"><td><button type="button" class="brandbtn" data-pgbrand="${esc(b.k)}" aria-pressed="${P.brand === b.k}">${esc(b.k)}</button><small>${esc([...b.seg].join(", "))}</small></td><td><div class="meter" role="img" aria-label="${gbp(b.spend)}"><i style="width:${100 * b.spend / bmax}%"></i></div></td><td class="r num"><b>${gbp(b.spend)}</b></td><td class="r num">${b.units}</td><td class="r num">${gbp(b.spend / b.units)}</td><td class="r num">${b.rec.size}</td>${panel ? `<td class="r num">${b.shop.size}</td>` : ""}<td class="num">${dLong(b.last)}</td></tr>`).join("") || `<tr><td colspan="8" class="wrap muted">No P&amp;G products on the receipts in this selection. Scan more receipts, widen the dates, or switch to the whole spreadsheet.</td></tr>`}
+      </tbody></table></div></div>
+    <div style="display:grid;gap:16px;min-width:0">
+      <div class="panel"><header><h2>Month by month</h2><span class="count">P&amp;G spend${P.brand ? ", " + esc(P.brand) : ""}</span></header><div class="sec"><div class="trend"><div class="plot">
+        ${shownMonths.map((m, i) => `<div class="col on" tabindex="0" data-tip="${mName(m)} · ${gbp(mv[i])}" aria-label="${mName(m)}, ${gbp(mv[i])}"><em>${gbp0(mv[i])}</em><i style="height:${100 * mv[i] / mmax}%"></i></div>`).join("")}</div>
+        <div class="axis">${shownMonths.map(m => `<span>${MONTHS[+m.slice(5) - 1]}</span>`).join("")}</div></div></div></div>
+      <div class="panel"><header><h2>By retailer</h2></header><div class="scroll"><table class="t"><tbody>${byStore.map(x => `<tr><td>${esc(x.k)}</td><td style="width:34%"><div class="meter"><i style="width:${100 * x.spend / smax}%"></i></div></td><td class="r num"><b>${gbp(x.spend)}</b></td><td class="r num">${x.units} units</td></tr>`).join("") || `<tr><td class="muted">Nothing to show.</td></tr>`}</tbody></table></div></div>
+    </div>
+    <div class="panel wide"><header><h2>Purchases</h2><span class="count">${rows.length > shown.length ? `Showing the latest ${shown.length} of ${rows.length.toLocaleString("en-GB")}. The export has them all.` : `${rows.length} line${rows.length === 1 ? "" : "s"}`}</span></header>
+      <div class="scroll"><table class="t"><thead><tr><th>Date</th><th>Retailer</th><th>Brand</th><th>Product as read</th><th class="r">Qty</th><th class="r">Unit</th><th class="r">Total</th><th>Promotion</th><th>Receipt</th><th>${panel ? "Shopper" : "Payment"}</th></tr></thead><tbody>
+      ${shown.map(r => `<tr><td class="num">${dLong(r.date)}</td><td>${esc(r.store)}${r.town ? `<small>${esc(r.town)}</small>` : ""}</td><td>${esc(r.brand)}<small>${esc(r.segment)}</small></td><td class="wrap">${esc(r.product)}</td><td class="r num">${r.qty}</td><td class="r num">${gbp(r.unit)}</td><td class="r num"><b>${gbp(r.total)}</b></td><td>${esc(r.promo) || `<span class="muted">None</span>`}</td><td class="num">${esc(r.receipt)}</td><td>${panel ? `<span class="num">${esc(r.shopper)}</span>` : r.tx ? `<button type="button" class="brandbtn" style="font-weight:400" data-goto="${r.tx}">Card ${esc(r.account)}</button>` : esc(r.payment)}</td></tr>`).join("")}
+      </tbody></table></div>
+      ${P.csvOpen ? `<div class="sec"><label for="csvBox" class="muted" style="font-size:12.5px">Copying was blocked here. Select all of this text and copy it, then paste into a spreadsheet or save it as a .csv file.</label><textarea class="csvbox" id="csvBox" readonly>${esc(pgCsv(rows))}</textarea></div>` : ""}
+      <details class="api"><summary>Which brands count as P&amp;G (${C.PG_BRANDS.length})</summary><p class="note" style="margin:0 14px 14px">${C.PG_BRANDS.map(b => esc(b.brand)).join(", ")}. A line counts when one of these names appears in the product text on the receipt. ${panel ? `This scope reads all ${P.panel.lines.toLocaleString("en-GB")} lines on ${P.panel.receipts.toLocaleString("en-GB")} receipts in your spreadsheet.` : "This scope covers every receipt in the app, whether matched to a payment, marked as cash or still in the inbox."}</p></details>
+    </div>`;
+}
+function render() { renderBudget(); renderPg(); renderSummary(); renderJobs(); renderInbox(); renderTray(); renderLedger(); renderDetail(); }
 
 /* ---------- Sync ---------- */
 async function sync(first) {
@@ -860,6 +962,21 @@ document.addEventListener("change", e => {
   else if (d.itemcat) { B.itemCat[C.key(d.itemcat)] = e.target.value; store.set("itemCat", B.itemCat); render(); toast(`${d.itemcat} now counts as ${CAT_NAME[e.target.value]}.`); }
   else if (d.merchcat) { B.merchCat[d.merchcat] = e.target.value; store.set("merchCat", B.merchCat); render(); }
 });
+document.addEventListener("click", async e => {
+  const t = e.target.closest("[data-pgscope],[data-pgbrand],[data-pgexport]"); if (!t) return;
+  const d = t.dataset;
+  if (d.pgscope) { P.scope = d.pgscope; P.from = P.to = ""; P.store = "all"; P.brand = null; P.csvOpen = false;
+    if (P.scope === "panel" && !P.panel) { renderPg(); try { await loadScript("pg-panel.js"); P.panel = window.TILL_PG_PANEL; } catch (err) { P.scope = "app"; toast("Could not load the spreadsheet data."); } } }
+  else if ("pgbrand" in d) P.brand = d.pgbrand && P.brand !== d.pgbrand ? d.pgbrand : null;
+  else if (d.pgexport) {
+    const rows = pgFiltered().rows, csv = pgCsv(rows), name = `pg-purchases-${P.scope === "panel" ? "spreadsheet" : "app"}${P.brand ? "-" + P.brand.toLowerCase().replace(/[^a-z0-9]+/g, "-") : ""}.csv`;
+    if (d.pgexport === "save" && saveFile) { try { await saveFile({ filename: name, data: "\ufeff" + csv }); toast(`Saved ${rows.length} purchase lines as ${name}.`); } catch (err) { toast(err && err.code === "declined" ? "Download cancelled." : "The download did not go through. Use Copy CSV instead."); } return; }
+    try { await navigator.clipboard.writeText(csv); toast(`Copied ${rows.length} purchase lines as CSV. Paste into a spreadsheet.`); return; } catch (err) { P.csvOpen = true; }
+  }
+  renderPg(); if (P.csvOpen) { const b = $("#csvBox"); if (b) { b.focus(); b.select(); } }
+});
+document.addEventListener("change", e => { const k = e.target.dataset.pg; if (!k) return; P[k] = e.target.value; if (P.from && P.to && P.from > P.to) P[k === "from" ? "to" : "from"] = e.target.value; P.csvOpen = false; renderPg(); });
+function probeDownloads() { if (window.claude && claude.use && !saveFile) claude.use("downloads").then(dl => { if (dl && dl.save) { saveFile = req => dl.save(req); renderPg(); } }); }
 const tipEl = $("#tip");
 document.addEventListener("mouseover", e => { const t = e.target.closest("[data-tip]"); if (!t) { tipEl.hidden = true; return; } tipEl.textContent = t.dataset.tip; tipEl.hidden = false; const r = t.getBoundingClientRect(); tipEl.style.left = Math.max(8, Math.min(window.innerWidth - tipEl.offsetWidth - 8, r.left + r.width / 2 - tipEl.offsetWidth / 2)) + "px"; tipEl.style.top = Math.max(8, r.top - 30) + "px"; });
 document.addEventListener("focusin", e => { const t = e.target.closest("[data-tip]"); if (t) t.dispatchEvent(new MouseEvent("mouseover", { bubbles: true })); });
@@ -878,7 +995,7 @@ document.addEventListener("keydown", e => { if (e.key === "Escape") document.bod
   B.itemCat = store.get("itemCat") || {}; B.merchCat = store.get("merchCat") || {};
   B.budget = { ...defaultBudgets(), ...(store.get("budgets") || {}) };
   B.month = Object.keys(S.match).map(k => S.tx.find(t => t.TransactionId === k).BookingDateTime.slice(0, 7)).sort().pop() || null;   // open on the latest month that has itemised receipts
-  setView(); render(); probeClaude(); window.addEventListener("load", probeClaude);
+  setView(); render(); probeClaude(); probeDownloads(); window.addEventListener("load", probeDownloads); window.addEventListener("load", probeClaude);
 })();
 </script>
 </body>
